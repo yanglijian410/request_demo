@@ -1,0 +1,71 @@
+import json
+import requests
+from requests.packages.urllib3.exceptions import InsecureRequestWarning
+requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+
+proxy = {
+   'http': 'http://10.71.233.110:3128',
+   'https': 'http://10.71.233.110:3128',
+}
+
+class CNC:
+    def __init__(self, ip="33.10.121.60", port=12345, username="test", password="test", proxy=proxy):
+
+        self.headers = {}
+        self.cnc_ip = ip
+        self.cnc_port = port
+        self.cnc_username = username
+        self.cnc_password = password
+        self.proxy = proxy
+
+        self._login()
+
+    def _login(self):
+        self.headers = {}
+        self.headers = {'Content-Type': 'application/x-www-form-urlencoded'}
+        data = 'username={}&password={}'.format(self.cnc_username, self.cnc_password)
+        response = requests.post(url="https://{}:{}/crosswork/sso/v1/tickets".format(self.cnc_ip, self.cnc_port), headers=self.headers, data=data, proxies=self.proxy, verify=False)
+        if response.status_code != 201:
+            raise Exception("Login failed tickets with error: {}".format(response.text))
+
+        auth_code = response.text
+        auth_text = "tgt={}&service=https%3A%2F%2F{}%3A{}%2Fapp-dashboard".format(auth_code, self.cnc_ip, self.cnc_port)
+
+        response = requests.post(url="https://{}:{}/crosswork/sso/v2/tickets/jwt".format(self.cnc_ip, self.cnc_port), headers=self.headers, data=auth_text, proxies=self.proxy, verify=False)
+
+        if response.status_code != 200:
+            raise Exception("Login failed jwt with error: {}".format(response.text))
+
+        auth_header = "Bearer " + response.text
+
+        self.headers["Authorization"] = auth_header
+        self.headers["Content-Type"] = 'application/json'
+
+    def crossword_summary(self):
+        data = {"node_id":""}
+
+        payload = json.dumps(data)
+        response = requests.post(url="https://33.10.121.60:30603/crosswork/platform/v2/cluster/summary/query", headers=self.headers, data=payload, proxies=self.proxy, verify=False)
+
+        if response.status_code == 403 and ret.json()['error'] == "Unauthorized request":
+            self._login()
+            response = requests.post(url="https://33.10.121.60:30603/crosswork/platform/v2/cluster/summary/query", headers=self.headers, data=payload, proxies=self.proxy, verify=False)
+
+        if response.status_code != 200:
+            raise Exception("API with error: {}".format(response.text))
+
+        return response.json()
+
+    def user_info(self):
+
+        response = requests.get(url="https://{}:{}/crosswork/aaa/v1/user/admin".format(self.cnc_ip, self.cnc_port), headers=self.headers, proxies=self.proxy, verify=False)
+
+        if response.status_code == 403 and ret.json()['error'] == "Unauthorized request":
+            self._login()
+            response = requests.get(url="https://{}:{}/crosswork/aaa/v1/user/admin".format(self.cnc_ip, self.cnc_port), headers=self.headers, proxies=self.proxy, verify=False)
+
+        if response.status_code != 200:
+            raise Exception("API with error: {}".format(response.text))
+
+        return response.json()
+
